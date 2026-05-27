@@ -23,6 +23,6 @@ CURSOR_FINGER      = 8     # landmark ID (8 = άκρη δείκτη)
 
 # ---- Κέρσορας (evdev) --------------------
 DELTA_SCALE          = 4.0   # camera-pixel → REL units (>1 = ταχύτερα)
-VELOCITY_HOLD_FRAMES = 2     # frames επανάληψης τελευταίου delta όταν χάνεται το χέρι
-HAND_LOST_TIMEOUT    = 1.0   # δευτερόλεπτα μέχρι να θεωρηθεί χαμένο το χέρι
-MOUSE_SUBDIVISIONS   = 2     # υπο-βήματα κίνησης ανά frame (×FRAME_TARGET = update rate)
+VELOCITY_HOLD_FRAMES = 4     # frames επανάληψης τελευταίου delta όταν χάνεται το χέρι
+HAND_LOST_TIMEOUT    = 1.5   # δευτερόλεπτα μέχρι να θεωρηθεί χαμένο το χέρι
+MOUSE_SUBDIVISIONS   = 4     # υπο-βήματα κίνησης ανά frame (×FRAME_TARGET = update rate)

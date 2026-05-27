@@ -17,9 +17,18 @@ from app.output import MouseOutput
 
 def handle_key(key, state, controller):
     """Χειρίζεται 'q'=έξοδος, 'm'=toggle κέρσορα."""
-    if key == ord('q'):
+    if key in (-1, 255):
+        return True
+
+    low = key & 0xFF
+    ch = chr(low).lower()
+
+    # Accept ESC and common layout variants for quit.
+    if low == 27 or ch in {'q', ';'}:
         return False
-    if key == ord('m'):
+
+    # Accept latin m/M and common greek/micro variants from some layouts.
+    if ch == 'm' or low in (181, 230):
         state.active = not state.active
         if state.active:
             state.prev_x = None
