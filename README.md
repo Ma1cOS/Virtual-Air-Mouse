@@ -1,6 +1,6 @@
 # Virtual Air Mouse
 
-Έλεγχος κέρσορα μέσω υπολογιστικής όρασης σε Linux/Wayland.
+Έλεγχος κέρσορα μέσω υπολογιστικής όρασης σε Linux (X11 και Wayland).
 Χρησιμοποιεί MediaPipe για ανίχνευση χεριού, EMA φίλτρο για εξομάλυνση,
 και evdev/UInput για απευθείας αποστολή REL events στον Kernel.
 
@@ -69,7 +69,7 @@ app/
 fuser /dev/video0 && kill $(fuser /dev/video0)
 ```
 
-**Ο κέρσορας δεν κουνιέται (Wayland):**
+**Ο κέρσορας δεν κουνιέται:**
 ```bash
 # Βεβαιώσου ότι είσαι στην ομάδα uinput
 groups $USER | grep uinput
