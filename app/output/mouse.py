@@ -55,7 +55,13 @@ class MouseOutput:
     @property
     def device_path(self):
         if self._device:
-            return self._device.device.path
+            # If the library supports it, grab it; otherwise return a placeholder string
+            try:
+                if self._device.device:
+                    return self._device.device.path
+            except AttributeError:
+                pass
+            return "/dev/uinput (Virtual)"
         return None
 
     def move(self, dx: int, dy: int):
