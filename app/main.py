@@ -1,8 +1,5 @@
 # ============================================================
-#  Main — Ενορχηστρωτής κύριου βρόχου
-# -----------------------------------------------------------
-#  Συνδέει: vision → smoothing → output
-#  REL-only pipeline: camera deltas → REL_X/REL_Y events
+#  Main: ενορχηστρωτής κύριου βρόχου
 # ============================================================
 
 import time
@@ -15,20 +12,24 @@ from app.smoothing import CursorController
 from app.output import MouseOutput
 
 
+_KEY_NOOP  = (-1, 255)   # waitKey returned no key
+_KEY_ESC   = 27
+_KEY_GREEK = (181, 230)  # μ/Μ variants on Greek keyboard layouts
+_KEY_QUIT  = {'q', ';'}   # Q and common nearby key on different layouts
+
+
 def handle_key(key, state, controller):
     """Χειρίζεται 'q'=έξοδος, 'm'=toggle κέρσορα."""
-    if key in (-1, 255):
+    if key in _KEY_NOOP:
         return True
 
     low = key & 0xFF
     ch = chr(low).lower()
 
-    # Accept ESC and common layout variants for quit.
-    if low == 27 or ch in {'q', ';'}:
+    if low == _KEY_ESC or ch in _KEY_QUIT:
         return False
 
-    # Accept latin m/M and common greek/micro variants from some layouts.
-    if ch == 'm' or low in (181, 230):
+    if ch == 'm' or low in _KEY_GREEK:
         state.active = not state.active
         if state.active:
             state.prev_x = None
@@ -38,6 +39,12 @@ def handle_key(key, state, controller):
             controller.reset_filter()
         print(f"Mouse: {'ON' if state.active else 'OFF'}")
     return True
+
+
+def _split_int(accum):
+    """Επιστρέφει το ακέραιο μέρος και κρατά το υπόλοιπο in-place."""
+    value = int(accum)
+    return value, accum - value
 
 
 def handle_reacquire(state, controller):
@@ -58,10 +65,8 @@ def compute_movement(state, smooth_cam_x, smooth_cam_y):
         cam_dy = smooth_cam_y - state.prev_y
         state.accum_x += cam_dx * config.DELTA_SCALE
         state.accum_y += cam_dy * config.DELTA_SCALE
-        dx = int(state.accum_x)
-        dy = int(state.accum_y)
-        state.accum_x -= dx
-        state.accum_y -= dy
+        dx, state.accum_x = _split_int(state.accum_x)
+        dy, state.accum_y = _split_int(state.accum_y)
     state.prev_x = smooth_cam_x
     state.prev_y = smooth_cam_y
     return dx, dy
@@ -113,7 +118,8 @@ def process_landmarks(img, lm_list, state, controller):
     return img, dx, dy
 
 
-def main():
+def init_mouse():
+    """Δημιουργία εικονικού ποντικιού + status print."""
     mouse = MouseOutput()
     if not mouse.ok:
         print("[!] evdev not available")
@@ -121,17 +127,73 @@ def main():
         print()
     else:
         print(f"[OK] Virtual mouse: {mouse.device_path}")
+    return mouse
 
-    cap = cv2.VideoCapture(config.CAMERA_INDEX)
+
+def init_camera(index=0):
+    """Άνοιγμα κάμερας με MJPG codec. Επιστρέφει cap ή None."""
+    cap = cv2.VideoCapture(index)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     if not cap.isOpened():
         print("No camera found.")
+        cap.release()
+        return None
+    return cap
+
+
+def grab_frame(cap):
+    """Λήψη frame από κάμερα + οριζόντιο mirror."""
+    success, img = cap.read()
+    if not success:
+        return None
+    return cv2.flip(img, 1)
+
+
+def detect_landmarks(detector, img):
+    """Ανίχνευση χεριού + εξαγωγή συντεταγμένων."""
+    img = detector.find_hands(img)
+    lm_list = detector.find_position(img)
+    return img, lm_list
+
+
+def emit_subframes(mouse, dx, dy, t0, state, controller):
+    """
+    Σπάσιμο (dx, dy) σε sub-frames με τοπικό accumulator.
+    Στέλνει REL events και ελέγχει πλήκτρα κάθε sub-frame.
+    Επιστρέφει False για έξοδο, True για συνέχεια.
+    """
+    elapsed = time.time() - t0
+    wait_ms = max(1, int(((1.0 / config.FRAME_TARGET) - elapsed) * 1000))
+
+    sub = config.MOUSE_SUBDIVISIONS
+    sub_wait = max(1, wait_ms // sub)
+    rx = ry = 0.0
+    step_x = dx / sub
+    step_y = dy / sub
+
+    for _ in range(sub):
+        rx += step_x
+        ry += step_y
+        sx, rx = _split_int(rx)
+        sy, ry = _split_int(ry)
+        if sx or sy:
+            mouse.move(sx, sy)
+        key = cv2.waitKey(sub_wait) & 0xFF
+        if not handle_key(key, state, controller):
+            return False
+    return True
+
+
+def main():
+    mouse = init_mouse()
+
+    cap = init_camera(config.CAMERA_INDEX)
+    if cap is None:
         mouse.close()
         return
 
     detector = HandDetector()
     controller = CursorController()
-
     state = CursorState()
 
     fps = 0.0
@@ -139,51 +201,24 @@ def main():
 
     try:
         while True:
-            now = time.time()
+            t0 = time.time()
             if prev_time > 0:
-                fps = 0.9 * fps + 0.1 * (1.0 / (now - prev_time))
-            prev_time = now
+                fps = 0.9 * fps + 0.1 * (1.0 / (t0 - prev_time))
+            prev_time = t0
 
-            success, img = cap.read()
-            if not success:
+            img = grab_frame(cap)
+            if img is None:
                 break
 
-            img = cv2.flip(img, 1)
-
-            img = detector.find_hands(img)
-            lm_list = detector.find_position(img)
-
+            img, lm_list = detect_landmarks(detector, img)
             img, dx, dy = process_landmarks(img, lm_list, state, controller)
 
             draw_status_bar(img, state, mouse)
             draw_fps(img, fps)
             cv2.imshow("Virtual Air Mouse", img)
 
-            elapsed = time.time() - now
-            wait_ms = max(1, int(((1.0 / config.FRAME_TARGET) - elapsed) * 1000))
-
-            sub = config.MOUSE_SUBDIVISIONS
-            sub_wait = max(1, wait_ms // sub)
-            rx = ry = 0.0
-            step_x = dx / sub
-            step_y = dy / sub
-            running = True
-
-            for _ in range(sub):
-                rx += step_x
-                ry += step_y
-                sx = int(rx); rx -= sx
-                sy = int(ry); ry -= sy
-                if sx or sy:
-                    mouse.move(sx, sy)
-                key = cv2.waitKey(sub_wait) & 0xFF
-                if not handle_key(key, state, controller):
-                    running = False
-                    break
-
-            if not running:
+            if not emit_subframes(mouse, dx, dy, t0, state, controller):
                 break
-
     finally:
         cap.release()
         cv2.destroyAllWindows()

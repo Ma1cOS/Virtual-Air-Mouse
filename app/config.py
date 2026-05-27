@@ -1,5 +1,5 @@
 # ============================================================
-#  Config — Κεντρικές ρυθμίσεις
+#  Config: κεντρικές ρυθμίσεις
 # -----------------------------------------------------------
 #  Κάθε παράμετρος της εφαρμογής ορίζεται εδώ.
 #  Τα modules διαβάζουν τις τιμές μέσω `from app import config`.
@@ -18,11 +18,11 @@ PREFERRED_HAND           = "Left" # "Right" | "Left" | "Any"
 
 # ---- Εξομάλυνση (EMA) --------------------
 ALPHA              = 0.20  # συντελεστής EMA (μικρότερος = πιο ομαλό)
-STABILITY_THRESHOLD = 15.0  # pixels κάμερας — κατώφλι «κλειδώματος»
+STABILITY_THRESHOLD = 15.0  # pixels κάμερας, κατώφλι κλειδώματος
 CURSOR_FINGER      = 8     # landmark ID (8 = άκρη δείκτη)
 
 # ---- Κέρσορας (evdev) --------------------
-DELTA_SCALE          = 4.0   # camera-pixel → REL units (>1 = ταχύτερα)
+DELTA_SCALE          = 4.0   # camera-pixel σε REL units (>1 = ταχύτερα)
 VELOCITY_HOLD_FRAMES = 4     # frames επανάληψης τελευταίου delta όταν χάνεται το χέρι
 HAND_LOST_TIMEOUT    = 1.5   # δευτερόλεπτα μέχρι να θεωρηθεί χαμένο το χέρι
 MOUSE_SUBDIVISIONS   = 4     # υπο-βήματα κίνησης ανά frame (×FRAME_TARGET = update rate)

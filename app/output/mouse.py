@@ -1,13 +1,13 @@
 # ============================================================
-#  MouseOutput — Εικονικό ποντίκι μέσω evdev/UInput
+#  MouseOutput: εικονικό ποντίκι μέσω evdev/UInput
 # -----------------------------------------------------------
 #  Απευθείας επικοινωνία με τον πυρήνα (/dev/uinput).
-#  Λειτουργεί σε Wayland — αντίθετα με pyautogui/pynput.
+#  Λειτουργεί σε Wayland, αντίθετα με pyautogui/pynput.
 #
 #  Απαιτήσεις:
-#    • pip install evdev
-#    • χρήστης στην ομάδα uinput
-#    • /dev/uinput προσβάσιμο
+#    - pip install evdev
+#    - χρήστης στην ομάδα uinput
+#    - /dev/uinput προσβάσιμο
 # ============================================================
 
 try:
@@ -60,7 +60,7 @@ class MouseOutput:
 
     def move(self, dx: int, dy: int):
         """
-        Σχετική κίνηση κέρσορα — στέλνει REL_X/REL_Y.
+        Σχετική κίνηση κέρσορα, στέλνει REL_X/REL_Y.
         Η κλιμάκωση γίνεται από τον orchestrator (DELTA_SCALE).
 
         @param dx: μονάδες REL_X

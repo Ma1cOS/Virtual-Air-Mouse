@@ -1,8 +1,8 @@
 # ============================================================
-#  CursorController — EMA smoothing pipeline
+#  CursorController: EMA smoothing pipeline
 # -----------------------------------------------------------
 #  Pipeline (per-frame):
-#    lm_list → extract cursor finger → EMA filter → smooth_cam
+#    lm_list, extract cursor finger, EMA filter, smooth_cam
 #
 #  SmoothingFilter: adaptive EMA
 #    s_t = α·x_t + (1-α)·s_{t-1}
@@ -54,7 +54,7 @@ class SmoothingFilter:
 
 class CursorController:
     """
-    Ελεγκτής κέρσορα — thin wrapper over EMA filter.
+    Ελεγκτής κέρσορα, thin wrapper over EMA filter.
 
     Δέχεται landmarks χεριού και επιστρέφει εξομαλυμένες
     συντεταγμένες στον χώρο της κάμερας.
@@ -64,16 +64,14 @@ class CursorController:
                  alpha=config.ALPHA):
         self.cursor_finger = cursor_finger
         self.filter = SmoothingFilter(alpha=alpha)
-        self.raw_x = None
-        self.raw_y = None
 
     def update(self, lm_list):
         if not lm_list or len(lm_list) <= self.cursor_finger:
             return None, None
 
-        self.raw_x = lm_list[self.cursor_finger][1]
-        self.raw_y = lm_list[self.cursor_finger][2]
-        return self.filter.update(self.raw_x, self.raw_y)
+        raw_x = lm_list[self.cursor_finger][1]
+        raw_y = lm_list[self.cursor_finger][2]
+        return self.filter.update(raw_x, raw_y)
 
     def get_display_pos(self):
         return self.filter.smoothed_x, self.filter.smoothed_y

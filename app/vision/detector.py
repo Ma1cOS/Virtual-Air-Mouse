@@ -1,15 +1,15 @@
 # ============================================================
-#  HandDetector — Ανίχνευση χεριού (MediaPipe Tasks)
+#  HandDetector: ανίχνευση χεριού (MediaPipe Tasks)
 # -----------------------------------------------------------
 #  Λειτουργίες:
-#    • Εντοπισμός χεριού και 21 landmarks (αρθρώσεις)
-#    • Φιλτράρισμα κατά handedness (Right/Left/Any)
-#    • Εξαγωγή συντεταγμένων σε pixel
-#    • Σχεδίαση σκελετού πάνω στην εικόνα
+#    - Εντοπισμός χεριού και 21 landmarks (αρθρώσεις)
+#    - Φιλτράρισμα κατά handedness (Right/Left/Any)
+#    - Εξαγωγή συντεταγμένων σε pixel
+#    - Σχεδίαση σκελετού πάνω στην εικόνα
 #
 #  Σημαντικό:
 #    Το find_position() ΠΡΕΠΕΙ να καλείται ΜΕΤΑ την find_hands()
-#    στο ίδιο καρέ — διαβάζει το self.results.
+#    στο ίδιο καρέ, διαβάζει self.results.
 #
 #  GPU delegate με αυτόματο fallback σε CPU.
 # ============================================================
@@ -46,8 +46,8 @@ class HandDetector:
     αυτόματο fallback σε CPU αν αποτύχει.
 
     Pipeline ανά καρέ:
-        find_hands(img)   → BGR→RGB → mp.Image → detect() → σχεδίαση
-        find_position(img)→ pixel conversion από self.results
+        find_hands(img):   BGR, RGB, mp.Image, detect(), σχεδίαση
+        find_position(img): pixel conversion από self.results
     """
 
     def __init__(self, max_num_hands=config.MAX_NUM_HANDS,
@@ -136,7 +136,7 @@ class HandDetector:
 
     def find_position(self, img, hand_no=None):
         """
-        Συντεταγμένες landmarks σε pixels — από το self.results.
+        Συντεταγμένες landmarks σε pixels, από self.results.
         Πρέπει να καλείται ΜΕΤΑ την find_hands() στο ίδιο καρέ.
 
         @param img: εικόνα OpenCV (για διαστάσεις)

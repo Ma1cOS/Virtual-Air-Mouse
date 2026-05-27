@@ -30,21 +30,18 @@ def draw_cursor_feedback(img, raw_x, raw_y, smooth_cam_x, smooth_cam_y):
 
 def draw_status_bar(img, state, mouse):
     """
-    Γραμμή κατάστασης: ON / OFF / UNAVAILABLE.
+    Γραμμή κατάστασης: UNAVAILABLE / ON / OFF.
 
     @param img: εικόνα OpenCV (BGR)
     @param state: CursorState
     @param mouse: MouseOutput
     """
-    if state.active:
-        status = "ON"
-        color = (0, 255, 0)
-    else:
-        status = "OFF"
-        color = (0, 0, 255)
     if not mouse.ok:
-        status = "UNAVAILABLE"
-        color = (0, 0, 255)
+        status, color = "UNAVAILABLE", (0, 0, 255)
+    elif state.active:
+        status, color = "ON", (0, 255, 0)
+    else:
+        status, color = "OFF", (0, 0, 255)
     cv2.putText(img, f"Mouse: {status}", (20, 50),
                 cv2.FONT_HERSHEY_PLAIN, 2, color, 2)
 
@@ -56,6 +53,11 @@ def draw_fps(img, fps):
     @param img: εικόνα OpenCV (BGR)
     @param fps: τιμή FPS (float)
     """
+    if fps >= 20:
+        color = (0, 255, 0)
+    elif fps >= 10:
+        color = (0, 165, 255)
+    else:
+        color = (0, 0, 255)
     cv2.putText(img, f"FPS: {fps:.0f}",
-                (img.shape[1] - 120, 50), cv2.FONT_HERSHEY_PLAIN, 1.5,
-                (0, 255, 0) if fps >= 20 else (0, 165, 255) if fps >= 10 else (0, 0, 255), 2)
+                (img.shape[1] - 120, 50), cv2.FONT_HERSHEY_PLAIN, 1.5, color, 2)
