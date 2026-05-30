@@ -10,13 +10,13 @@ from app.display import landmark_pos, draw_cursor_feedback, draw_status_bar, dra
 from app.vision import HandDetector
 from app.smoothing import CursorController
 from app.output import MouseOutput
+from app.input import ThreadedCamera
 
 
 _KEY_NOOP  = (-1, 255)   # waitKey returned no key
 _KEY_ESC   = 27
 _KEY_GREEK = (181, 230)  # μ/Μ variants on Greek keyboard layouts
 _KEY_QUIT  = {'q', ';'}   # Q and common nearby key on different layouts
-
 
 def handle_key(key, state, controller):
     """Χειρίζεται 'q'=έξοδος, 'm'=toggle κέρσορα."""
@@ -63,10 +63,18 @@ def compute_movement(state, smooth_cam_x, smooth_cam_y):
     if state.active and state.prev_x is not None:
         cam_dx = smooth_cam_x - state.prev_x
         cam_dy = smooth_cam_y - state.prev_y
+        # print(f"Raw delta: ({cam_dx}, {cam_dy})")
         state.accum_x += cam_dx * config.DELTA_SCALE
         state.accum_y += cam_dy * config.DELTA_SCALE
         dx, state.accum_x = _split_int(state.accum_x)
-        dy, state.accum_y = _split_int(state.accum_y)
+        dy, state.accum_y = _split_int(state.accum_y) 
+        # Round dx to 8 digits
+        dx = round(dx+state.accum_x, 8)
+        dy = round(dy+state.accum_y, 8)
+        
+
+        #print(f"With Delta and split_int which does: ({dx}, {dy})")
+
     state.prev_x = smooth_cam_x
     state.prev_y = smooth_cam_y
     return dx, dy
@@ -93,8 +101,12 @@ def process_landmarks(img, lm_list, state, controller):
             handle_reacquire(state, controller)
 
         smooth_cam_x, smooth_cam_y = controller.update(lm_list)
+
+        # Εύρεση της μεταβολής (dx, dy) σε relative units με sub-pixel accumulation
         if smooth_cam_x is not None:
             dx, dy = compute_movement(state, smooth_cam_x, smooth_cam_y)
+
+        # print(f"dx: {dx}, dy: {dy}")
 
         state.last_dx = dx
         state.last_dy = dy
@@ -129,24 +141,6 @@ def init_mouse():
         print(f"[OK] Virtual mouse: {mouse.device_path}")
     return mouse
 
-
-def init_camera(index=0):
-    """Άνοιγμα κάμερας με MJPG codec. Επιστρέφει cap ή None."""
-    cap = cv2.VideoCapture(index)
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-    if not cap.isOpened():
-        print("No camera found.")
-        cap.release()
-        return None
-    return cap
-
-
-def grab_frame(cap):
-    """Λήψη frame από κάμερα + οριζόντιο mirror."""
-    success, img = cap.read()
-    if not success:
-        return None
-    return cv2.flip(img, 1)
 
 
 def detect_landmarks(detector, img):
@@ -187,10 +181,10 @@ def emit_subframes(mouse, dx, dy, t0, state, controller):
 def main():
     mouse = init_mouse()
 
-    cap = init_camera(config.CAMERA_INDEX)
-    if cap is None:
-        mouse.close()
-        return
+    # Αρχικοποίηση και εκκίνηση του Thread της κάμερας
+    threaded_cam = ThreadedCamera(config.CAMERA_INDEX).start()
+    
+    time.sleep(0.1) #Αναμονή μέχρι να ανοίξει
 
     detector = HandDetector()
     controller = CursorController()
@@ -206,13 +200,16 @@ def main():
                 fps = 0.9 * fps + 0.1 * (1.0 / (t0 - prev_time))
             prev_time = t0
 
-            img = grab_frame(cap)
-            if img is None:
-                break
+            # Διαβάζουμε το τελευταίο frame από την κάμερα στο παράλληλο νήμα
+            ret, img = threaded_cam.read()
+            if not ret or img is None:
+                continue # Ή break, αν έκλεισε η κάμερα
 
             img, lm_list = detect_landmarks(detector, img)
             img, dx, dy = process_landmarks(img, lm_list, state, controller)
 
+            #print(f"FPS: {fps:.1f}, dx: {dx}, dy: {dy}, Active: {state.active}, Hand Lost: {state.hand_lost}")
+            
             draw_status_bar(img, state, mouse)
             draw_fps(img, fps)
             cv2.imshow("Virtual Air Mouse", img)
@@ -220,7 +217,7 @@ def main():
             if not emit_subframes(mouse, dx, dy, t0, state, controller):
                 break
     finally:
-        cap.release()
+        threaded_cam.stop()
         cv2.destroyAllWindows()
         detector.close()
         mouse.close()

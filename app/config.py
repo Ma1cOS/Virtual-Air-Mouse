@@ -11,7 +11,7 @@ CAMERA_INDEX = 0          # /dev/video0
 FRAME_TARGET = 30         # fps-στόχος
 
 # ---- Ανίχνευση χεριού (MediaPipe) --------
-MAX_NUM_HANDS            = 2      # απαιτείται 2 για σωστό handedness
+MAX_NUM_HANDS            = 1      # απαιτείται 2 για σωστό handedness
 MIN_DETECTION_CONFIDENCE = 0.7    # ελάχιστη βεβαιότητα εντοπισμού
 MIN_TRACKING_CONFIDENCE  = 0.4    # ελάχιστη βεβαιότητα παρακολούθησης
 PREFERRED_HAND           = "Left" # "Right" | "Left" | "Any"
@@ -19,10 +19,11 @@ PREFERRED_HAND           = "Left" # "Right" | "Left" | "Any"
 # ---- Εξομάλυνση (EMA) --------------------
 ALPHA              = 0.20  # συντελεστής EMA (μικρότερος = πιο ομαλό)
 STABILITY_THRESHOLD = 15.0  # pixels κάμερας, κατώφλι κλειδώματος
-CURSOR_FINGER      = 8     # landmark ID (8 = άκρη δείκτη)
+CURSOR_FINGER      = 0     # landmark ID (8 = άκρη δείκτη) (0= κάτω άκρη παλάμης)
 
 # ---- Κέρσορας (evdev) --------------------
+
 DELTA_SCALE          = 4.0   # camera-pixel σε REL units (>1 = ταχύτερα)
-VELOCITY_HOLD_FRAMES = 4     # frames επανάληψης τελευταίου delta όταν χάνεται το χέρι
-HAND_LOST_TIMEOUT    = 1.5   # δευτερόλεπτα μέχρι να θεωρηθεί χαμένο το χέρι
-MOUSE_SUBDIVISIONS   = 4     # υπο-βήματα κίνησης ανά frame (×FRAME_TARGET = update rate)
+VELOCITY_HOLD_FRAMES = 1     # frames επανάληψης τελευταίου delta όταν χάνεται το χέρι
+HAND_LOST_TIMEOUT    = 0.5   # δευτερόλεπτα μέχρι να θεωρηθεί χαμένο το χέρι
+MOUSE_SUBDIVISIONS   = 1     # υπο-βήματα κίνησης ανά frame (×FRAME_TARGET = update rate)

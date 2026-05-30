@@ -19,6 +19,7 @@ import cv2
 from mediapipe.tasks.python import vision, BaseOptions
 from mediapipe.tasks.python.vision import RunningMode
 from mediapipe import Image, ImageFormat
+import time
 
 from app import config
 
@@ -69,7 +70,7 @@ class HandDetector:
                     base_options=BaseOptions(
                         model_asset_path=_model_path(),
                         delegate=delegate),
-                    running_mode=RunningMode.IMAGE,
+                    running_mode=RunningMode.VIDEO,
                     num_hands=max_num_hands,
                     min_hand_detection_confidence=min_detection_confidence,
                     min_hand_presence_confidence=min_tracking_confidence,
@@ -112,7 +113,8 @@ class HandDetector:
         """
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         mp_image = Image(image_format=ImageFormat.SRGB, data=img_rgb)
-        self.results = self._landmarker.detect(mp_image)
+        frame_timestamp_ms = int(time.time() * 1000)
+        self.results = self._landmarker.detect_for_video(mp_image,frame_timestamp_ms)
 
         hand_index = self._get_hand_index()
         if draw and hand_index is not None:
