@@ -17,13 +17,20 @@ MIN_TRACKING_CONFIDENCE  = 0.4    # ελάχιστη βεβαιότητα παρ
 PREFERRED_HAND           = "Left" # "Right" | "Left" | "Any"
 
 # ---- Εξομάλυνση (EMA) --------------------
-ALPHA              = 0.20  # συντελεστής EMA (μικρότερος = πιο ομαλό)
+ALPHA              = 0.40  # συντελεστής EMA (μικρότερος = πιο ομαλό)
 STABILITY_THRESHOLD = 15.0  # pixels κάμερας, κατώφλι κλειδώματος
-CURSOR_FINGER      = 0     # landmark ID (8 = άκρη δείκτη) (0= κάτω άκρη παλάμης)
+CURSOR_FINGER      = 0     # landmark ID (0= κάτω άκρη παλάμης)
+FINGER_BASE_CLICK = 4    # landmark ID για ανίχνευση κλικ βάσης (συνδυάζεται με τα παρακάτω) (π.χ. 4 = άκρη αντίχειρα)
+FINGER_LEFT_CLICK = 8     # landmark ID για ανίχνευση κλικ (π.χ. 8 = άκρη δείκτη)
+FINGER_RIGHT_CLICK = 12   # landmark ID για ανίχνευση δεξιού κλικ (π.χ. 12 = άκρη μεσαίου)
+FINGER_MIDDLE_CLICK = 16  # landmark ID για ανίχνευση μεσαίου κλικ (π.χ. 16 = άκρη παράμεσου)
+CLICK_DISTANCE_THRESHOLD = 25.0  # η απόσταση σε piexls μεταξύ του base finger και των click fingers για να θεωρηθεί κλικ
+TIME_TO_CLICK = 0.2  # δευτερόλεπτα που πρέπει να διατηρείται το gesture για να εκτελεστεί το κλικ
+TIME_TO_HOLD = 0.4  # δευτερόλεπτα που πρέπει να διατηρείται το gesture για να θεωρηθεί "hold" (παρατεταμένο κλικ) 
 
 # ---- Κέρσορας (evdev) --------------------
 
 DELTA_SCALE          = 4.0   # camera-pixel σε REL units (>1 = ταχύτερα)
 VELOCITY_HOLD_FRAMES = 1     # frames επανάληψης τελευταίου delta όταν χάνεται το χέρι
 HAND_LOST_TIMEOUT    = 0.5   # δευτερόλεπτα μέχρι να θεωρηθεί χαμένο το χέρι
-MOUSE_SUBDIVISIONS   = 1     # υπο-βήματα κίνησης ανά frame (×FRAME_TARGET = update rate)
+MOUSE_SUBDIVISIONS   = 5     # υπο-βήματα κίνησης ανά frame (×FRAME_TARGET = update rate)

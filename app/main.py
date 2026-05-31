@@ -12,6 +12,7 @@ from app.smoothing import CursorController
 from app.output import MouseOutput
 from app.input import ThreadedCamera
 
+from app.state import GestureState
 
 _KEY_NOOP  = (-1, 255)   # waitKey returned no key
 _KEY_ESC   = 27
@@ -157,6 +158,7 @@ def emit_subframes(mouse, dx, dy, t0, state, controller):
     Επιστρέφει False για έξοδο, True για συνέχεια.
     """
     elapsed = time.time() - t0
+    
     wait_ms = max(1, int(((1.0 / config.FRAME_TARGET) - elapsed) * 1000))
 
     sub = config.MOUSE_SUBDIVISIONS
@@ -176,6 +178,38 @@ def emit_subframes(mouse, dx, dy, t0, state, controller):
         if not handle_key(key, state, controller):
             return False
     return True
+
+def watch_for_clicks(state: CursorState, lm_list: list, mouse: MouseOutput):
+    """Παρακολουθεί για gestures κλικ (π.χ. pinching) και ενημερώνει το state."""
+    if not lm_list:
+        return
+    
+    # Πρώτα, υπολογίζω την απόσταση μεταξύ του base finger και όλων των click
+
+    base_x, base_y = landmark_pos(lm_list, config.FINGER_BASE_CLICK) 
+    click_distances = {}
+    for click_type, click_id in [(GestureState.LEFT, config.FINGER_LEFT_CLICK),
+                                (GestureState.RIGHT, config.FINGER_RIGHT_CLICK),
+                                (GestureState.MIDDLE, config.FINGER_MIDDLE_CLICK)]:
+        click_x, click_y = landmark_pos(lm_list, click_id)
+
+        # Υπολογίζω την ευκλείδια απόσταση μεταξύ του base finger και του click finger
+        dist = ((click_x - base_x) ** 2 + (click_y - base_y) ** 2) ** 0.5
+        click_distances[click_type] = dist
+    
+    # Παίρνω την ελάχιστη απόσταση και τον αντίστοιχο τύπο κλικ
+    min_click_state = min(click_distances, key=click_distances.get)
+    min_distance = click_distances[min_click_state]
+
+    extrasensitivity=0
+    if state.currently_holding:
+        extrasensitivity= 10
+    if min_distance < config.CLICK_DISTANCE_THRESHOLD + extrasensitivity:
+        #print(f"Detected match with thumb and : {min_click_state.name} (distance: {min_distance:.1f})")
+        state.updateClickState(min_click_state,mouse)
+    else: 
+        #print(f"Detected unmatch with thumb.")
+        state.updateClickState(GestureState.NONE, mouse)
 
 
 def main():
@@ -207,6 +241,8 @@ def main():
 
             img, lm_list = detect_landmarks(detector, img)
             img, dx, dy = process_landmarks(img, lm_list, state, controller)
+
+            watch_for_clicks(state, lm_list, mouse)
 
             #print(f"FPS: {fps:.1f}, dx: {dx}, dy: {dy}, Active: {state.active}, Hand Lost: {state.hand_lost}")
             
