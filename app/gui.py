@@ -2,19 +2,47 @@
 GUI κλάση που τρέχει σε παράλληλλο thread, ανανεώνει την εικόνα και το interface.
 Επιπλέον, διαχειρίζεται τα κουμπιά της εφαρμογής όπως το start/stop του tracking του mouse με m και το κλείσιμο της εφαρμογής με q.
 """
-
+import threading
+import queue
+import time
 import cv2
 from app import config
+from app.output.mouse import MouseOutput
+from app.state import CursorState
+import numpy as np
+
 _KEY_NOOP  = (-1, 255)   # waitKey returned no key
 _KEY_ESC   = 27
 _KEY_GREEK = (181, 230)  # μ/Μ variants on Greek keyboard layouts
 _KEY_QUIT  = {'q', ';'}   # Q and common nearby key on different layouts
 
 class GUIWorker:
-    image = 0
+    image = np.zeros((480, 640, 3), dtype=np.uint8)
+    state = CursorState()
+    def __init__(self, pause_mouse_event,image_queue: queue.Queue, state_queue: queue.Queue):
+        self.pause_mouse_event = pause_mouse_event
+        self.image_queue = image_queue
+        self.state_queue = state_queue
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()  # Ξεκινάει αμέσως το thread
 
-    def __init__(self):
-         pass
+    def _loop(self):
+        while True:
+
+            try:
+                current_img = self.image_queue.get_nowait()
+                self.image = current_img
+            except queue.Empty:
+                pass # Δεν υπήρχε νέα εικόνα, κρατάει την παλιά
+
+            # 2. Έλεγχος για νέο state
+            try:
+                current_state = self.state_queue.get_nowait()
+                self.state = current_state
+            except queue.Empty:
+                pass # Δεν υπήρχε νέο state, κρατάει το παλιό
+            self.update(self.image,self.state)
+             
 
     def handle_key(self,key):
         """Χειρίζεται 'q'=έξοδος, 'm'=toggle κέρσορα."""
@@ -28,21 +56,14 @@ class GUIWorker:
             return False
 
         if ch == 'm' or low in _KEY_GREEK:
-            self.state.active = not self.state.active
-        
-            self.state.prev_x = None
-            self.state.prev_y = None
-            self.state.accum_x = 0.0
-            self.state.accum_y = 0.0
-            #controller.reset_filter()  
-            #print(f"Mouse: {'ON' if state.active else 'OFF'}")
+            self.pause_mouse_event.clear() if self.pause_mouse_event.is_set() else self.pause_mouse_event.set()
         return True
 
-    def update(self,img,state,mouse,fps,controller):
+    def update(self,img,state):
                 self.image = img
                 self.state = state
-                self.draw_status_bar(self.image, state, mouse)
-                self.draw_fps(self.image, fps)
+                self.draw_status_bar(state)
+                self.draw_fps(self.state.fps)
                 self.updateDeltaLabel()
                 self.draw_cursor_feedback(self.image,self.state.raw_x,self.state.raw_y,self.state.smooth_cam_x,self.state.smooth_cam_y)
                 cv2.imshow("Virtual Air Mouse", img)
@@ -88,7 +109,7 @@ class GUIWorker:
         cv2.line(img, (raw_x, raw_y), (smooth_cam_x, smooth_cam_y), (255, 255, 0), 1)
 
 
-    def draw_status_bar(self, img, state, mouse):
+    def draw_status_bar(self, state):
         """
         Γραμμή κατάστασης: UNAVAILABLE / ON / OFF.
 
@@ -96,9 +117,9 @@ class GUIWorker:
         @param state: CursorState
         @param mouse: MouseOutput
         """
-        if not mouse.ok:
-            status, color = "UNAVAILABLE", (0, 0, 255)
-        elif state.active:
+        #if not mouse.ok:
+        #    status, color = "UNAVAILABLE", (0, 0, 255)
+        if state.active:
             status, color = "ON", (0, 255, 0)
         else:
             status, color = "OFF", (0, 0, 255)
@@ -106,7 +127,7 @@ class GUIWorker:
                     cv2.FONT_HERSHEY_PLAIN, 2, color, 2)
 
 
-    def draw_fps(self, img, fps):
+    def draw_fps(self, fps):
         """
         Ένδειξη FPS πάνω δεξιά. Πράσινο ≥20, πορτοκαλί 10-19, κόκκινο <10.
 
@@ -119,6 +140,6 @@ class GUIWorker:
             color = (0, 165, 255)
         else:
             color = (0, 0, 255)
-        cv2.putText(img, f"FPS: {fps:.0f}",
-                    (img.shape[1] - 120, 50), cv2.FONT_HERSHEY_PLAIN, 1.5, color, 2)
+        cv2.putText(self.image, f"FPS: {fps:.0f}",
+                    (self.image.shape[1] - 120, 50), cv2.FONT_HERSHEY_PLAIN, 1.5, color, 2)
     

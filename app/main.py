@@ -2,6 +2,7 @@
 #  Main: ενορχηστρωτής κύριου βρόχου
 # ============================================================
 
+import threading
 import time
 from app import config
 from app.gui import GUIWorker
@@ -14,6 +15,8 @@ from app.input import ThreadedCamera
 from app.state import GestureState
 
 
+
+import queue
 
 
 
@@ -192,6 +195,10 @@ def watch_for_clicks(state: CursorState, lm_list: list, mouse: MouseOutput):
 
 
 def main():
+    # Δημιουργία ουράς που κρατάει μόνο 1 αντικείμενο τη φορά
+    image_queue = queue.Queue(maxsize=1)
+    state_queue = queue.Queue(maxsize=1)
+
     mouse = init_mouse()
 
     # Αρχικοποίηση και εκκίνηση του Thread της κάμερας
@@ -203,15 +210,20 @@ def main():
     controller = CursorController()
     state = CursorState()
 
-    fps = 0.0
+    state.fps = 0.0
     prev_time = 0.0
 
-    gui_worker = GUIWorker()
+    pause_mouse_event = threading.Event()
+    gui_worker = GUIWorker(pause_mouse_event,image_queue,state_queue)
+
+    
+    
+
     try:
         while True:
             t0 = time.time()
             if prev_time > 0:
-                fps = 0.9 * fps + 0.1 * (1.0 / (t0 - prev_time))
+                state.fps = 0.9 * state.fps + 0.1 * (1.0 / (t0 - prev_time))
             prev_time = t0
 
             # Διαβάζουμε το τελευταίο frame από την κάμερα στο παράλληλο νήμα
@@ -223,15 +235,28 @@ def main():
             state = process_landmarks(img, lm_list, state, controller, gui_worker)
 
             
+            # Άδειασμα παλιάς τιμής εικόνας και state στην ουρά (αν υπάρχει) και τοποθέτηση νέας
+            if not image_queue.empty():
+                try: image_queue.get_nowait()
+                except queue.Empty: pass
+            image_queue.put(img)
+            if not state_queue.empty():
+                try: state_queue.get_nowait()
+                except queue.Empty: pass
+            state_queue.put(state)
 
             #print(f"FPS: {fps:.1f}, dx: {dx}, dy: {dy}, Active: {state.active}, Hand Lost: {state.hand_lost}")
             
             watch_for_clicks(state, lm_list, mouse)
 
-            gui_worker.update(img,state,mouse,fps,controller)
+            #gui_worker.update(img,state,mouse,fps)
             
-            if gui_worker.getIsMouseActive():
-                emit_subframes(mouse, state.dx, state.dy, t0, state, controller)
+
+            if not pause_mouse_event.is_set():
+                state.active = True
+                emit_subframes(mouse, state.dx, state.dy, t0, state,controller)
+            else:
+                state.active = False
                 
                 
     finally:
