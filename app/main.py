@@ -137,16 +137,12 @@ def detect_landmarks(detector, img):
     return img, lm_list
 
 
-def emit_subframes(mouse, dx, dy, t0, state, controller):
+def emit_subframes(mouse, dx, dy):
     """
     Σπάσιμο (dx, dy) σε sub-frames με τοπικό accumulator.
     Στέλνει REL events και ελέγχει πλήκτρα κάθε sub-frame.
     Επιστρέφει False για έξοδο, True για συνέχεια.
     """
-    elapsed = time.time() - t0
-    
-    
-
     sub = config.MOUSE_SUBDIVISIONS
     
     rx = ry = 0.0
@@ -185,7 +181,7 @@ def watch_for_clicks(state: CursorState, lm_list: list, mouse: MouseOutput):
 
     extrasensitivity=0
     if state.currently_holding:
-        extrasensitivity= 10
+        extrasensitivity= 5
     if min_distance < config.CLICK_DISTANCE_THRESHOLD + extrasensitivity:
         #print(f"Detected match with thumb and : {min_click_state.name} (distance: {min_distance:.1f})")
         state.updateClickState(min_click_state,mouse)
@@ -217,14 +213,15 @@ def main():
     gui_worker = GUIWorker(pause_mouse_event,image_queue,state_queue)
 
     
-    
+    TARGET_FPS = config.FRAME_TARGET
+    FRAME_DURATION = 1.0 / TARGET_FPS
 
     try:
         while True:
             t0 = time.time()
             if prev_time > 0:
                 state.fps = 0.9 * state.fps + 0.1 * (1.0 / (t0 - prev_time))
-            prev_time = t0
+            
 
             # Διαβάζουμε το τελευταίο frame από την κάμερα στο παράλληλο νήμα
             ret, img = threaded_cam.read()
@@ -235,7 +232,7 @@ def main():
             state = process_landmarks(img, lm_list, state, controller, gui_worker)
 
             
-            # Άδειασμα παλιάς τιμής εικόνας και state στην ουρά (αν υπάρχει) και τοποθέτηση νέας
+            # Άδειασμα παλιάς τιμής εικόνας και state στην ουρά του gui (αν υπάρχει) και τοποθέτηση νέας
             if not image_queue.empty():
                 try: image_queue.get_nowait()
                 except queue.Empty: pass
@@ -247,17 +244,24 @@ def main():
 
             #print(f"FPS: {fps:.1f}, dx: {dx}, dy: {dy}, Active: {state.active}, Hand Lost: {state.hand_lost}")
             
-            watch_for_clicks(state, lm_list, mouse)
 
-            #gui_worker.update(img,state,mouse,fps)
-            
-
-            if not pause_mouse_event.is_set():
+            if not pause_mouse_event.is_set(): # Αν το mouse δεν ειναι paused
                 state.active = True
-                emit_subframes(mouse, state.dx, state.dy, t0, state,controller)
+                watch_for_clicks(state, lm_list, mouse)
+                emit_subframes(mouse, state.dx, state.dy)
             else:
                 state.active = False
+    
+
+            # Πόση ώρα πέρασε από την αρχή του loop
+            elapsed_in_loop = time.time() - t0
+            sleep_time = FRAME_DURATION - elapsed_in_loop
+            
+            if sleep_time > 0:
+                time.sleep(sleep_time) # Τεχνητή καθυστέρηση για να ματσάρουμε τα fps
                 
+            
+            prev_time = t0  # Αποθήκευση του χρόνου έναρξης του loop  
                 
     finally:
         threaded_cam.stop()
