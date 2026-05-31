@@ -130,11 +130,13 @@ def init_mouse():
 
 
 
-def detect_landmarks(detector, img):
+def detect_landmarks(detector, img,state):
     """Ανίχνευση χεριού + εξαγωγή συντεταγμένων."""
-    img = detector.find_hands(img)
+    img,landmarks = detector.find_hands(img)
     lm_list = detector.find_position(img)
-    return img, lm_list
+    state.landmarks = landmarks
+    state.lm_list = lm_list
+    return img
 
 
 def emit_subframes(mouse, dx, dy):
@@ -228,8 +230,8 @@ def main():
             if not ret or img is None:
                 continue # Ή break, αν έκλεισε η κάμερα
 
-            img, lm_list = detect_landmarks(detector, img)
-            state = process_landmarks(img, lm_list, state, controller, gui_worker)
+            img = detect_landmarks(detector, img, state)
+            state = process_landmarks(img, state.lm_list, state, controller, gui_worker)
 
             
             # Άδειασμα παλιάς τιμής εικόνας και state στην ουρά του gui (αν υπάρχει) και τοποθέτηση νέας
@@ -247,7 +249,7 @@ def main():
 
             if not pause_mouse_event.is_set(): # Αν το mouse δεν ειναι paused
                 state.active = True
-                watch_for_clicks(state, lm_list, mouse)
+                watch_for_clicks(state, state.lm_list, mouse)
                 emit_subframes(mouse, state.dx, state.dy)
             else:
                 state.active = False

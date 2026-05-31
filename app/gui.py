@@ -16,7 +16,20 @@ _KEY_ESC   = 27
 _KEY_GREEK = (181, 230)  # μ/Μ variants on Greek keyboard layouts
 _KEY_QUIT  = {'q', ';'}   # Q and common nearby key on different layouts
 
+
+_HAND_CONNECTIONS = (
+    (0, 1), (1, 2), (2, 3), (3, 4),       # αντίχειρας
+    (0, 5), (5, 6), (6, 7), (7, 8),       # δείκτης
+    (0, 9), (9, 10), (10, 11), (11, 12),  # μεσαίος
+    (0, 13), (13, 14), (14, 15), (15, 16),# παράμεσος
+    (0, 17), (17, 18), (18, 19), (19, 20),# μικρός
+    (5, 9), (9, 13), (13, 17)             # παλάμη
+)
+
 class GUIWorker:
+    """"
+    Τρέχει σε ξεχωριστό thread, διαχειρίζεται την εικόνα και το interface.
+    """
     image = np.zeros((480, 640, 3), dtype=np.uint8)
     state = CursorState()
     def __init__(self, pause_mouse_event,image_queue: queue.Queue, state_queue: queue.Queue):
@@ -66,6 +79,7 @@ class GUIWorker:
                 self.draw_fps(self.state.fps)
                 self.updateDeltaLabel()
                 self.draw_cursor_feedback(self.image,self.state.raw_x,self.state.raw_y,self.state.smooth_cam_x,self.state.smooth_cam_y)
+                self._draw_landmarks()
                 cv2.imshow("Virtual Air Mouse", img)
                 #wait_ms = max(1, int(((1.0 / config.FRAME_TARGET) - elapsed) * 1000))
                 #sub_wait = max(1, wait_ms // sub)
@@ -143,3 +157,17 @@ class GUIWorker:
         cv2.putText(self.image, f"FPS: {fps:.0f}",
                     (self.image.shape[1] - 120, 50), cv2.FONT_HERSHEY_PLAIN, 1.5, color, 2)
     
+    def _draw_landmarks(self):
+        if not self.state.landmarks:
+            return
+        h, w, _ = self.image.shape
+
+        for lm in self.state.landmarks:
+            x, y = int(lm.x * w), int(lm.y * h)
+            cv2.circle(self.image, (x, y), 4, (0, 255, 0), cv2.FILLED)
+
+        for a, b in _HAND_CONNECTIONS:
+            if a < len(self.state.landmarks) and b < len(self.state.landmarks):
+                x1, y1 = int(self.state.landmarks[a].x * w), int(self.state.landmarks[a].y * h)
+                x2, y2 = int(self.state.landmarks[b].x * w), int(self.state.landmarks[b].y * h)
+                cv2.line(self.image, (x1, y1), (x2, y2), (0, 255, 0), 2)

@@ -8,7 +8,7 @@
 
 # ---- Κάμερα ------------------------------
 CAMERA_INDEX = 0          # /dev/video0
-FRAME_TARGET = 25         # fps-στόχος
+FRAME_TARGET = 60         # fps-στόχος
 
 # ---- Ανίχνευση χεριού (MediaPipe) --------
 MAX_NUM_HANDS            = 1      # απαιτείται 2 για σωστό handedness

@@ -34,6 +34,10 @@ class CursorState:
         self.last_dx = 0
         self.last_dy = 0
 
+
+        self.landmarks = []
+        self.lm_list = []
+        
         self.fps = 0
         self.raw_x = 0
         self.raw_y = 0
