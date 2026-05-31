@@ -33,6 +33,13 @@ class CursorState:
         self.hold_frames = 0
         self.last_dx = 0
         self.last_dy = 0
+
+        self.raw_x = 0
+        self.raw_y = 0
+
+        self.smooth_cam_x = 0
+        self.smooth_cam_y = 0
+
         self.accum_x = 0.0
         self.accum_y = 0.0
         self.thumb_connection: GestureState | None = None
