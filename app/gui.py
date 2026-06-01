@@ -74,6 +74,7 @@ class GUIWorker:
         self.draw_fps(state.fps)
         self.draw_delta_label(state)
         self.draw_filter_feedback(img, state)
+        self.draw_shortcuts()
         self._draw_landmarks()
         cv2.imshow("Virtual Air Mouse", img)
         key = cv2.waitKey(1) & 0xFF
@@ -81,6 +82,11 @@ class GUIWorker:
 
     def stop(self):
         cv2.destroyAllWindows()
+
+    def draw_shortcuts(self):
+        h = self.image.shape[0]
+        cv2.putText(self.image, "M: toggle mouse   Q: quit", (20, h - 20),
+                    cv2.FONT_HERSHEY_PLAIN, 1.0, (200, 200, 200), 1)
 
     def draw_delta_label(self, state):
         color = (0, 255, 255) if state.active else (128, 128, 128)

@@ -55,6 +55,8 @@ def process_landmarks(lm_list, state, controller):
 
         filtered = controller.update_click_points(lm_list)
         if filtered is not None:
+            if state.smooth_cam_x is not None:
+                filtered[config.CURSOR_FINGER] = (state.smooth_cam_x, state.smooth_cam_y)
             state.filtered_positions = filtered
 
         if state.smooth_cam_x is not None:
@@ -90,27 +92,6 @@ def detect_landmarks(detector, img, state):
     state.landmarks = landmarks
     state.lm_list = lm_list
     return img
-
-
-def emit_subframes(mouse, dx, dy):
-    if dx == 0 and dy == 0:
-        return
-
-    sub = config.MOUSE_SUBDIVISIONS
-    if abs(dx) + abs(dy) < config.MOVE_DEAD_ZONE:
-        return
-
-    rx = ry = 0.0
-    step_x = dx / sub
-    step_y = dy / sub
-
-    for _ in range(sub):
-        rx += step_x
-        ry += step_y
-        sx, rx = split_int(rx)
-        sy, ry = split_int(ry)
-        if sx or sy:
-            mouse.move(sx, sy)
 
 
 def main():
@@ -169,7 +150,10 @@ def main():
             if not pause_event.is_set():
                 state.active = True
                 watch_for_clicks(state, state.lm_list, mouse)
-                emit_subframes(mouse, state.dx, state.dy)
+                dx, dy = state.dx, state.dy
+                if dx or dy:
+                    if abs(dx) + abs(dy) >= config.MOVE_DEAD_ZONE:
+                        mouse.move(dx, dy)
             else:
                 state.active = False
                 release_hold(state, mouse)

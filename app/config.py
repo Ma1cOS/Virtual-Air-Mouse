@@ -34,6 +34,5 @@ TIME_TO_HOLD = 0.4  # δευτερόλεπτα που πρέπει να διατ
 DELTA_SCALE          = 4.0   # camera-pixel σε REL units (>1 = ταχύτερα)
 VELOCITY_HOLD_FRAMES = 1     # frames επανάληψης τελευταίου delta όταν χάνεται το χέρι
 HAND_LOST_TIMEOUT    = 0.5   # δευτερόλεπτα μέχρι να θεωρηθεί χαμένο το χέρι
-MOUSE_SUBDIVISIONS   = 1     # υπο-βήματα κίνησης ανά frame (×FRAME_TARGET = update rate)
 MOVE_DEAD_ZONE       = 3     # ελάχιστη κίνηση σε REL units για αποστολή event (κόβει θόρυβο)
 CAM_DEAD_ZONE        = 0.5   # ελάχιστη μετατόπιση σε camera pixels για καταγραφή κίνησης
