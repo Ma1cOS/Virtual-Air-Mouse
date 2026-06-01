@@ -55,6 +55,15 @@ class CursorState:
         self.currently_holding_state: GestureState = GestureState.NONE
 
         self.last_click_time: time = 0.0
+
+        self.filtered_base_x = None
+        self.filtered_base_y = None
+        self.filtered_left_x = None
+        self.filtered_left_y = None
+        self.filtered_right_x = None
+        self.filtered_right_y = None
+        self.filtered_middle_x = None
+        self.filtered_middle_y = None
     
 
     def updateClickState(self, new_thumb_connection: GestureState, mouse):

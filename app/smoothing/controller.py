@@ -64,22 +64,20 @@ class CursorController:
     """
 
     def __init__(self, cursor_finger=config.CURSOR_FINGER,
-                 alpha=config.ALPHA):
+                 alpha=config.ALPHA,
+                 click_alpha=config.CLICK_ALPHA):
         self.cursor_finger = cursor_finger
         self.cursor_finger_filter = SmoothingFilter(alpha=alpha)
 
-        """ Αφήνω αυτά για το μέλλον αν χρειαστεί για τα gestures (αν και δεν νμζ)
-        self.base_click_finger = config.FINGER_BASE_CLICK   
-        self.left_click_finger = config.FINGER_LEFT_CLICK    
-        self.right_click_finger = config.FINGER_RIGHT_CLICK   
-        self.middle_click_finger = config.FINGER_MIDDLE_CLICK 
+        self.base_click_finger = config.FINGER_BASE_CLICK
+        self.left_click_finger = config.FINGER_LEFT_CLICK
+        self.right_click_finger = config.FINGER_RIGHT_CLICK
+        self.middle_click_finger = config.FINGER_MIDDLE_CLICK
 
-        
-        self.base_click_finger_filter = SmoothingFilter(alpha=alpha)
-        self.left_click_finger_filter = SmoothingFilter(alpha=alpha)
-        self.right_click_finger_filter = SmoothingFilter(alpha=alpha)
-        self.middle_click_finger_filter = SmoothingFilter(alpha=alpha)
-        """
+        self.base_click_filter = SmoothingFilter(alpha=click_alpha)
+        self.left_click_filter = SmoothingFilter(alpha=click_alpha)
+        self.right_click_filter = SmoothingFilter(alpha=click_alpha)
+        self.middle_click_filter = SmoothingFilter(alpha=click_alpha)
 
     def update(self, lm_list):
         if not lm_list or len(lm_list) <= self.cursor_finger:
@@ -94,5 +92,26 @@ class CursorController:
     def get_display_pos(self):
         return self.cursor_finger_filter.smoothed_x, self.cursor_finger_filter.smoothed_y
 
+    def update_click_points(self, lm_list):
+        if not lm_list or len(lm_list) <= self.middle_click_finger:
+            return None
+        base = self.base_click_filter.update(
+            lm_list[self.base_click_finger][1],
+            lm_list[self.base_click_finger][2])
+        left = self.left_click_filter.update(
+            lm_list[self.left_click_finger][1],
+            lm_list[self.left_click_finger][2])
+        right = self.right_click_filter.update(
+            lm_list[self.right_click_finger][1],
+            lm_list[self.right_click_finger][2])
+        middle = self.middle_click_filter.update(
+            lm_list[self.middle_click_finger][1],
+            lm_list[self.middle_click_finger][2])
+        return base, left, right, middle
+
     def reset_filter(self):
         self.cursor_finger_filter.reset()
+        self.base_click_filter.reset()
+        self.left_click_filter.reset()
+        self.right_click_filter.reset()
+        self.middle_click_filter.reset()

@@ -7,7 +7,6 @@ import queue
 import time
 import cv2
 from app import config
-from app.output.mouse import MouseOutput
 from app.state import CursorState
 import numpy as np
 
@@ -32,15 +31,16 @@ class GUIWorker:
     """
     image = np.zeros((480, 640, 3), dtype=np.uint8)
     state = CursorState()
-    def __init__(self, pause_mouse_event,image_queue: queue.Queue, state_queue: queue.Queue):
+    def __init__(self, pause_mouse_event, quit_event, image_queue: queue.Queue, state_queue: queue.Queue):
         self.pause_mouse_event = pause_mouse_event
+        self.quit_event = quit_event
         self.image_queue = image_queue
         self.state_queue = state_queue
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()  # Ξεκινάει αμέσως το thread
 
     def _loop(self):
-        while True:
+        while not self.quit_event.is_set():
 
             try:
                 current_img = self.image_queue.get_nowait()
@@ -54,7 +54,8 @@ class GUIWorker:
                 self.state = current_state
             except queue.Empty:
                 pass # Δεν υπήρχε νέο state, κρατάει το παλιό
-            self.update(self.image,self.state)
+            if not self.update(self.image,self.state):
+                break
              
 
     def handle_key(self,key):
@@ -66,6 +67,7 @@ class GUIWorker:
         ch = chr(low).lower()
 
         if low == _KEY_ESC or ch in _KEY_QUIT:
+            self.quit_event.set()
             return False
 
         if ch == 'm' or low in _KEY_GREEK:
@@ -78,14 +80,14 @@ class GUIWorker:
                 self.draw_status_bar(state)
                 self.draw_fps(self.state.fps)
                 self.updateDeltaLabel()
-                self.draw_cursor_feedback(self.image,self.state.raw_x,self.state.raw_y,self.state.smooth_cam_x,self.state.smooth_cam_y)
+                self.draw_cursor_feedback(self.image, self.state)
                 self._draw_landmarks()
                 cv2.imshow("Virtual Air Mouse", img)
                 #wait_ms = max(1, int(((1.0 / config.FRAME_TARGET) - elapsed) * 1000))
                 #sub_wait = max(1, wait_ms // sub)
                 #key = cv2.waitKey(sub_wait) & 0xFF
                 key = cv2.waitKey(1) & 0xFF
-                self.handle_key(key)
+                return self.handle_key(key)
 
     def getIsMouseActive(self):
          return self.state.active            
@@ -104,23 +106,28 @@ class GUIWorker:
 
 
 
-    def draw_cursor_feedback(self, img, raw_x, raw_y, smooth_cam_x, smooth_cam_y):
-        """
-        Σχεδιάζει: πράσινος κύκλος = raw, κόκκινος = smooth, κίτρινη γραμμή.
-
-        @param img: εικόνα OpenCV (BGR)
-        @param raw_x, raw_y: ακατέργαστη θέση στην κάμερα
-        @param smooth_cam_x, smooth_cam_y: εξομαλυμένη θέση στην κάμερα
-        """
-        
-        if None in (raw_x, raw_y, smooth_cam_x, smooth_cam_y):
+    def draw_cursor_feedback(self, img, state):
+        if not state.lm_list:
             return
-        smooth_cam_x = int(smooth_cam_x)
-        smooth_cam_y = int(smooth_cam_y)
 
-        cv2.circle(img, (raw_x, raw_y), 8, (0, 255, 0), 2)
-        cv2.circle(img, (smooth_cam_x, smooth_cam_y), 8, (0, 0, 255), -1)
-        cv2.line(img, (raw_x, raw_y), (smooth_cam_x, smooth_cam_y), (255, 255, 0), 1)
+        points = [
+            (config.CURSOR_FINGER, state.smooth_cam_x, state.smooth_cam_y),
+            (config.FINGER_BASE_CLICK, state.filtered_base_x, state.filtered_base_y),
+            (config.FINGER_LEFT_CLICK, state.filtered_left_x, state.filtered_left_y),
+            (config.FINGER_RIGHT_CLICK, state.filtered_right_x, state.filtered_right_y),
+            (config.FINGER_MIDDLE_CLICK, state.filtered_middle_x, state.filtered_middle_y),
+        ]
+
+        for finger_id, smooth_x, smooth_y in points:
+            if None in (smooth_x, smooth_y):
+                continue
+            if finger_id >= len(state.lm_list):
+                continue
+            raw_x = state.lm_list[finger_id][1]
+            raw_y = state.lm_list[finger_id][2]
+            sx, sy = int(smooth_x), int(smooth_y)
+            cv2.circle(img, (sx, sy), 6, (0, 0, 255), -1)
+            cv2.line(img, (raw_x, raw_y), (sx, sy), (255, 255, 0), 1)
 
 
     def draw_status_bar(self, state):

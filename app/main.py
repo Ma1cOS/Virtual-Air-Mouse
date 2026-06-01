@@ -43,14 +43,14 @@ def compute_movement(state, smooth_cam_x, smooth_cam_y):
     if state.active and state.prev_x is not None:
         cam_dx = smooth_cam_x - state.prev_x
         cam_dy = smooth_cam_y - state.prev_y
-        # print(f"Raw delta: ({cam_dx}, {cam_dy})")
-        state.accum_x += cam_dx * config.DELTA_SCALE
-        state.accum_y += cam_dy * config.DELTA_SCALE
-        dx, state.accum_x = _split_int(state.accum_x)
-        dy, state.accum_y = _split_int(state.accum_y) 
-        # Round dx to 8 digits (μαλλον αυτό δεν βοηθάει κ πολύ)
-        #dx = round(dx+state.accum_x, 8)
-        #dy = round(dy+state.accum_y, 8)
+        if abs(cam_dx) < config.CAM_DEAD_ZONE and abs(cam_dy) < config.CAM_DEAD_ZONE:
+            state.accum_x = 0.0
+            state.accum_y = 0.0
+        else:
+            state.accum_x += cam_dx * config.DELTA_SCALE
+            state.accum_y += cam_dy * config.DELTA_SCALE
+            dx, state.accum_x = _split_int(state.accum_x)
+            dy, state.accum_y = _split_int(state.accum_y)
         
 
         #print(f"With Delta and split_int which does: ({dx}, {dy})")
@@ -90,6 +90,13 @@ def process_landmarks(lm_list, state, controller):
             handle_reacquire(state, controller)
 
         state.smooth_cam_x, state.smooth_cam_y = controller.update(lm_list)
+
+        filtered = controller.update_click_points(lm_list)
+        if filtered is not None:
+            (state.filtered_base_x, state.filtered_base_y), \
+            (state.filtered_left_x, state.filtered_left_y), \
+            (state.filtered_right_x, state.filtered_right_y), \
+            (state.filtered_middle_x, state.filtered_middle_y) = filtered
 
         # Εύρεση της μεταβολής (dx, dy) σε relative units με sub-pixel accumulation
         if state.smooth_cam_x is not None:
@@ -142,11 +149,16 @@ def detect_landmarks(detector, img,state):
 def emit_subframes(mouse, dx, dy):
     """
     Σπάσιμο (dx, dy) σε sub-frames με τοπικό accumulator.
-    Στέλνει REL events και ελέγχει πλήκτρα κάθε sub-frame.
-    Επιστρέφει False για έξοδο, True για συνέχεια.
+    Στέλνει REL events μόνο όταν υπάρχει αξιοσημείωτη κίνηση.
     """
+    if dx == 0 and dy == 0:
+        return
+
     sub = config.MOUSE_SUBDIVISIONS
-    
+    total = abs(dx) + abs(dy)
+    if total < config.MOVE_DEAD_ZONE:
+        return
+
     rx = ry = 0.0
     step_x = dx / sub
     step_y = dy / sub
@@ -162,18 +174,26 @@ def emit_subframes(mouse, dx, dy):
 def watch_for_clicks(state: CursorState, lm_list: list, mouse: MouseOutput):
     """Παρακολουθεί για gestures κλικ (π.χ. pinching) και ενημερώνει το state."""
     if not lm_list:
+        if state.currently_holding:
+            mouse.set_click_state(state.currently_holding_state, down=False)
+            state.currently_holding = False
+            state.thumb_connection = None
         return
-    
-    # Πρώτα, υπολογίζω την απόσταση μεταξύ του base finger και όλων των click
 
-    base_x, base_y = landmark_pos(lm_list, config.FINGER_BASE_CLICK) 
+    if None in (state.filtered_base_x, state.filtered_left_x,
+                state.filtered_right_x, state.filtered_middle_x):
+        return
+
+    base_x, base_y = state.filtered_base_x, state.filtered_base_y
+
+    click_positions = {
+        GestureState.LEFT: (state.filtered_left_x, state.filtered_left_y),
+        GestureState.RIGHT: (state.filtered_right_x, state.filtered_right_y),
+        GestureState.MIDDLE: (state.filtered_middle_x, state.filtered_middle_y),
+    }
+
     click_distances = {}
-    for click_type, click_id in [(GestureState.LEFT, config.FINGER_LEFT_CLICK),
-                                (GestureState.RIGHT, config.FINGER_RIGHT_CLICK),
-                                (GestureState.MIDDLE, config.FINGER_MIDDLE_CLICK)]:
-        click_x, click_y = landmark_pos(lm_list, click_id)
-
-        # Υπολογίζω την ευκλείδια απόσταση μεταξύ του base finger και του click finger
+    for click_type, (click_x, click_y) in click_positions.items():
         dist = ((click_x - base_x) ** 2 + (click_y - base_y) ** 2) ** 0.5
         click_distances[click_type] = dist
     
@@ -212,14 +232,19 @@ def main():
     prev_time = 0.0
 
     pause_mouse_event = threading.Event()
-    gui_worker = GUIWorker(pause_mouse_event,image_queue,state_queue)
+    pause_mouse_event.set()  # ξεκινάει paused/OFF
+    quit_event = threading.Event()
+    gui_worker = GUIWorker(pause_mouse_event, quit_event, image_queue, state_queue)
 
     
     TARGET_FPS = config.FRAME_TARGET
     FRAME_DURATION = 1.0 / TARGET_FPS
 
+    # ------------- Κύριος βρόχος -----------------
     try:
         while True:
+            if quit_event.is_set():
+                break
             t0 = time.time()
             if prev_time > 0:
                 state.fps = 0.9 * state.fps + 0.1 * (1.0 / (t0 - prev_time))
@@ -234,11 +259,13 @@ def main():
             state = process_landmarks(state.lm_list, state, controller)
 
             
-            # Άδειασμα παλιάς τιμής εικόνας και state στην ουρά του gui (αν υπάρχει) και τοποθέτηση νέας
+            # Ενημέρωση GUI μέσω των ουρών (κρατάει μόνο το τελευταίο frame)
             if not image_queue.empty():
                 try: image_queue.get_nowait()
                 except queue.Empty: pass
             image_queue.put(img)
+
+            # Ενημέρωση state στην GUI μέσω της ουράς (κρατάει μόνο το τελευταίο state)
             if not state_queue.empty():
                 try: state_queue.get_nowait()
                 except queue.Empty: pass
@@ -246,13 +273,16 @@ def main():
 
             #print(f"FPS: {fps:.1f}, dx: {dx}, dy: {dy}, Active: {state.active}, Hand Lost: {state.hand_lost}")
             
-
             if not pause_mouse_event.is_set(): # Αν το mouse δεν ειναι paused
                 state.active = True
                 watch_for_clicks(state, state.lm_list, mouse)
                 emit_subframes(mouse, state.dx, state.dy)
             else:
                 state.active = False
+                if state.currently_holding:
+                    mouse.set_click_state(state.currently_holding_state, down=False)
+                    state.currently_holding = False
+                    state.thumb_connection = None
     
 
             # Πόση ώρα πέρασε από την αρχή του loop
