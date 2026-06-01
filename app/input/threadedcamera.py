@@ -2,6 +2,7 @@
 import threading
 import time
 import cv2
+from app import config
 
 class ThreadedCamera:
     def __init__(self, camera_index):
@@ -50,7 +51,7 @@ class ThreadedCamera:
                 else:
                     self.ret = False
             
-            time.sleep(0.016) # για να μην απασχολείται πλήρως ο επεξεργαστής
+            time.sleep(config.CAMERA_POLL_SLEEP)
 
     def read(self):
         with self.read_lock:

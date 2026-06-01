@@ -36,3 +36,10 @@ VELOCITY_HOLD_FRAMES = 1     # frames επανάληψης τελευταίου 
 HAND_LOST_TIMEOUT    = 0.5   # δευτερόλεπτα μέχρι να θεωρηθεί χαμένο το χέρι
 MOVE_DEAD_ZONE       = 3     # ελάχιστη κίνηση σε REL units για αποστολή event (κόβει θόρυβο)
 CAM_DEAD_ZONE        = 0.5   # ελάχιστη μετατόπιση σε camera pixels για καταγραφή κίνησης
+
+# ---- Timing / calibration --------------------
+
+FPS_SMOOTHING        = 0.9   # βάρος EMA για rolling FPS counter
+STABILITY_REDUCTION  = 0.1   # πολλαπλασιαστής alpha όταν το χέρι είναι σταθερό
+HOLD_HYSTERESIS      = 5     # extra pixels ανοχής στο click threshold κατά το hold
+CAMERA_POLL_SLEEP    = 0.016 # sec ύπνου στο camera thread (~62Hz poll rate)
