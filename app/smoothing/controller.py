@@ -66,7 +66,20 @@ class CursorController:
     def __init__(self, cursor_finger=config.CURSOR_FINGER,
                  alpha=config.ALPHA):
         self.cursor_finger = cursor_finger
-        self.filter = SmoothingFilter(alpha=alpha)
+        self.cursor_finger_filter = SmoothingFilter(alpha=alpha)
+
+        """ Αφήνω αυτά για το μέλλον αν χρειαστεί για τα gestures (αν και δεν νμζ)
+        self.base_click_finger = config.FINGER_BASE_CLICK   
+        self.left_click_finger = config.FINGER_LEFT_CLICK    
+        self.right_click_finger = config.FINGER_RIGHT_CLICK   
+        self.middle_click_finger = config.FINGER_MIDDLE_CLICK 
+
+        
+        self.base_click_finger_filter = SmoothingFilter(alpha=alpha)
+        self.left_click_finger_filter = SmoothingFilter(alpha=alpha)
+        self.right_click_finger_filter = SmoothingFilter(alpha=alpha)
+        self.middle_click_finger_filter = SmoothingFilter(alpha=alpha)
+        """
 
     def update(self, lm_list):
         if not lm_list or len(lm_list) <= self.cursor_finger:
@@ -76,10 +89,10 @@ class CursorController:
         raw_x = lm_list[self.cursor_finger][1]
         raw_y = lm_list[self.cursor_finger][2]
         # Ενημέρωση του φίλτρου με τις ακατέργαστες συντεταγμένες και λήψη των εξομαλυμένων συντεταγμένων
-        return self.filter.update(raw_x, raw_y)
+        return self.cursor_finger_filter.update(raw_x, raw_y)
 
     def get_display_pos(self):
-        return self.filter.smoothed_x, self.filter.smoothed_y
+        return self.cursor_finger_filter.smoothed_x, self.cursor_finger_filter.smoothed_y
 
     def reset_filter(self):
-        self.filter.reset()
+        self.cursor_finger_filter.reset()

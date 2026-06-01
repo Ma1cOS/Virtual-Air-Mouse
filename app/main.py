@@ -48,9 +48,9 @@ def compute_movement(state, smooth_cam_x, smooth_cam_y):
         state.accum_y += cam_dy * config.DELTA_SCALE
         dx, state.accum_x = _split_int(state.accum_x)
         dy, state.accum_y = _split_int(state.accum_y) 
-        # Round dx to 8 digits
-        dx = round(dx+state.accum_x, 8)
-        dy = round(dy+state.accum_y, 8)
+        # Round dx to 8 digits (μαλλον αυτό δεν βοηθάει κ πολύ)
+        #dx = round(dx+state.accum_x, 8)
+        #dy = round(dy+state.accum_y, 8)
         
 
         #print(f"With Delta and split_int which does: ({dx}, {dy})")
@@ -69,7 +69,7 @@ def landmark_pos(lm_list, finger_id):
         """
         return lm_list[finger_id][1], lm_list[finger_id][2]
 
-def process_landmarks(img, lm_list, state, controller,gui_worker):
+def process_landmarks(lm_list, state, controller):
     """
     Διαχείριση landmark detection, EMA smoothing, movement, και
     drawing με οπτική ανατροφοδότηση.
@@ -231,7 +231,7 @@ def main():
                 continue # Ή break, αν έκλεισε η κάμερα
 
             img = detect_landmarks(detector, img, state)
-            state = process_landmarks(img, state.lm_list, state, controller, gui_worker)
+            state = process_landmarks(state.lm_list, state, controller)
 
             
             # Άδειασμα παλιάς τιμής εικόνας και state στην ουρά του gui (αν υπάρχει) και τοποθέτηση νέας
