@@ -10,6 +10,11 @@
 #    - /dev/uinput προσβάσιμο
 # ============================================================
 
+
+from app.state import GestureState
+
+import time
+
 try:
     from evdev import UInput, ecodes as _ecodes
     _evdev_ok = True
@@ -40,7 +45,7 @@ class MouseOutput:
                     _ecodes.REL_X, _ecodes.REL_Y,
                 ],
                 _ecodes.EV_KEY: [
-                    _ecodes.BTN_LEFT,
+                    _ecodes.BTN_LEFT,_ecodes.BTN_RIGHT,_ecodes.BTN_MIDDLE,
                 ],
             }, name="virtual-air-mouse", version=0x3)
             self._ok = True
@@ -55,7 +60,13 @@ class MouseOutput:
     @property
     def device_path(self):
         if self._device:
-            return self._device.device.path
+            # If the library supports it, grab it; otherwise return a placeholder string
+            try:
+                if self._device.device:
+                    return self._device.device.path
+            except AttributeError:
+                pass
+            return "/dev/uinput (Virtual)"
         return None
 
     def move(self, dx: int, dy: int):
@@ -70,6 +81,46 @@ class MouseOutput:
             return
         self._device.write(_ecodes.EV_REL, _ecodes.REL_X, dx)
         self._device.write(_ecodes.EV_REL, _ecodes.REL_Y, dy)
+        self._device.syn()
+
+    def set_click_state(self, button: GestureState, down=True):
+        """
+        Εκτέλεση κλικ ποντικιού.
+
+        @param button: ClickState.LEFT, ClickState.RIGHT, ή ClickState.MIDDLE
+        @param down: True για πάτημα, False για απελευθέρωση
+        """
+        if not self._ok or button is None:
+            return
+        
+        if button == GestureState.LEFT:
+            code = _ecodes.BTN_LEFT
+        elif button == GestureState.RIGHT:
+            code = _ecodes.BTN_RIGHT
+        elif button == GestureState.MIDDLE:
+            code = _ecodes.BTN_MIDDLE
+        else:
+            return  # Άγνωστο κουμπί
+
+        value = 1 if down else 0
+        self._device.write(_ecodes.EV_KEY, code, value)
+        self._device.syn()
+    
+    def click(self, button: GestureState):
+        """Εκτέλεση κλικ (πατήματος + απελευθέρωσης)."""
+        if button == GestureState.LEFT:
+            code = _ecodes.BTN_LEFT
+        elif button == GestureState.RIGHT:
+            code = _ecodes.BTN_RIGHT
+        elif button == GestureState.MIDDLE:
+            code = _ecodes.BTN_MIDDLE
+        else:
+            return  # Άγνωστο κουμπί
+
+        self._device.write(_ecodes.EV_KEY, code, 1) # Πάτημα
+        self._device.syn()
+
+        self._device.write(_ecodes.EV_KEY, code, 0) # Απελευθέρωση
         self._device.syn()
 
     def close(self):

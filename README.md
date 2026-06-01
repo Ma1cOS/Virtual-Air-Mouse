@@ -9,7 +9,7 @@
 ## Γρήγορη εκκίνηση
 
 ```bash
-python3 -m venv venv
+python3.12 -m venv venv
 venv/bin/pip install -r requirements.txt
 
 # Ο χρήστης πρέπει να ανήκει στην ομάδα uinput

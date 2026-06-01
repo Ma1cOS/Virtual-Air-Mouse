@@ -19,18 +19,12 @@ import cv2
 from mediapipe.tasks.python import vision, BaseOptions
 from mediapipe.tasks.python.vision import RunningMode
 from mediapipe import Image, ImageFormat
+import time
 
 from app import config
 
 
-_HAND_CONNECTIONS = (
-    (0, 1), (1, 2), (2, 3), (3, 4),       # αντίχειρας
-    (0, 5), (5, 6), (6, 7), (7, 8),       # δείκτης
-    (0, 9), (9, 10), (10, 11), (11, 12),  # μεσαίος
-    (0, 13), (13, 14), (14, 15), (15, 16),# παράμεσος
-    (0, 17), (17, 18), (18, 19), (19, 20),# μικρός
-    (5, 9), (9, 13), (13, 17)             # παλάμη
-)
+
 
 
 def _model_path():
@@ -69,7 +63,7 @@ class HandDetector:
                     base_options=BaseOptions(
                         model_asset_path=_model_path(),
                         delegate=delegate),
-                    running_mode=RunningMode.IMAGE,
+                    running_mode=RunningMode.VIDEO,
                     num_hands=max_num_hands,
                     min_hand_detection_confidence=min_detection_confidence,
                     min_hand_presence_confidence=min_tracking_confidence,
@@ -112,27 +106,15 @@ class HandDetector:
         """
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         mp_image = Image(image_format=ImageFormat.SRGB, data=img_rgb)
-        self.results = self._landmarker.detect(mp_image)
+        frame_timestamp_ms = int(time.time() * 1000)
+        self.results = self._landmarker.detect_for_video(mp_image,frame_timestamp_ms)
 
         hand_index = self._get_hand_index()
+        landmarks=[]
         if draw and hand_index is not None:
             landmarks = self.results.hand_landmarks[hand_index]
-            self._draw_landmarks(img, landmarks)
 
-        return img
-
-    def _draw_landmarks(self, img, landmarks):
-        h, w, _ = img.shape
-
-        for lm in landmarks:
-            x, y = int(lm.x * w), int(lm.y * h)
-            cv2.circle(img, (x, y), 4, (0, 255, 0), cv2.FILLED)
-
-        for a, b in _HAND_CONNECTIONS:
-            if a < len(landmarks) and b < len(landmarks):
-                x1, y1 = int(landmarks[a].x * w), int(landmarks[a].y * h)
-                x2, y2 = int(landmarks[b].x * w), int(landmarks[b].y * h)
-                cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        return img,landmarks
 
     def find_position(self, img, hand_no=None):
         """
