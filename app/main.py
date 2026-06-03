@@ -48,10 +48,6 @@ def compute_movement(state: CursorState, smooth_x: float, smooth_y: float) -> tu
     once they cross an integer. Without this, slow hand motion looks
     like a cursor stuck on a grid.
 
-    The dead zone (CAM_DEAD_ZONE) throws away sub-threshold movement.
-    Without it, sensor noise builds up in the accumulator and the
-    cursor drifts on its own.
-
     Returns:
         (dx, dy) in REL units. These are integers.
     """
@@ -60,16 +56,10 @@ def compute_movement(state: CursorState, smooth_x: float, smooth_y: float) -> tu
         cam_dx = smooth_x - state.prev_x
         cam_dy = smooth_y - state.prev_y
 
-        # Noise gate. Below dead zone, kill the accumulators so tiny
-        # jitter doesn't slowly accumulate into fake motion.
-        if abs(cam_dx) < config.CAM_DEAD_ZONE and abs(cam_dy) < config.CAM_DEAD_ZONE:
-            state.accum_x = 0.0
-            state.accum_y = 0.0
-        else:
-            state.accum_x += cam_dx * config.DELTA_SCALE
-            state.accum_y += cam_dy * config.DELTA_SCALE
-            dx, state.accum_x = split_int(state.accum_x)
-            dy, state.accum_y = split_int(state.accum_y)
+        state.accum_x += cam_dx * config.DELTA_SCALE
+        state.accum_y += cam_dy * config.DELTA_SCALE
+        dx, state.accum_x = split_int(state.accum_x)
+        dy, state.accum_y = split_int(state.accum_y)
 
     state.prev_x = smooth_x
     state.prev_y = smooth_y
