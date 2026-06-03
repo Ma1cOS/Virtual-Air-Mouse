@@ -135,9 +135,11 @@ def init_mouse() -> MouseOutput:
 def detect_landmarks(detector: HandDetector, img, state: CursorState):
     """Hand detection via MediaPipe. Stores landmarks + annotated image."""
     img, landmarks = detector.find_hands(img)
-    lm_list = detector.find_position(img)
     state.landmarks = landmarks
+    
+    lm_list = detector.find_position(img)
     state.lm_list = lm_list
+    
     return img
 
 
@@ -180,8 +182,8 @@ def main() -> None:
                              + (1 - config.FPS_SMOOTHING) * instant_fps)
 
             # (1) Camera. Latest frame from the background thread.
-            ret, img = threaded_cam.read()
-            if not ret or img is None:
+            flag, img = threaded_cam.read()
+            if not flag or img is None:
                 continue
 
             # (2) Detection + processing. MediaPipe -> EMA -> movement.
