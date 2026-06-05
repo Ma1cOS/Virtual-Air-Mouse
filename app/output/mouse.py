@@ -11,7 +11,7 @@
 # ============================================================
 
 
-from app.state import GestureState
+from app.gestures import GestureState
 
 import time
 

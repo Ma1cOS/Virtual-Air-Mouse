@@ -1,9 +1,20 @@
-# ============================================================
-#  Main: ενορχηστρωτής κύριου βρόχου
-# ============================================================
+"""The main loop. Camera in, mouse events out.
+
+Per frame, in order:
+    1. grab frame from camera thread
+    2. hand detection (MediaPipe)
+    3. EMA smoothing for cursor + click fingers
+    4. movement: sub-pixel accumulation -> dead zone -> REL events
+    5. pinch gesture -> click/hold state machine
+    6. evdev/uinput: move cursor, press buttons
+"""
+
+from __future__ import annotations
 
 import threading
 import time
+import queue
+
 from app import config
 from app.gui import GUIWorker
 from app.state import CursorState
@@ -11,24 +22,17 @@ from app.vision import HandDetector
 from app.smoothing import CursorController
 from app.output import MouseOutput
 from app.input import ThreadedCamera
-
-from app.state import GestureState
-
-
-
-import queue
+from app.gestures import watch_for_clicks, release_hold
+from app.utils import split_int, landmark_pos
 
 
+def handle_reacquire(state: CursorState, controller: CursorController) -> None:
+    """Reset everything when the hand comes back after being lost.
 
-
-def _split_int(accum):
-    """Επιστρέφει το ακέραιο μέρος και κρατά το υπόλοιπο in-place."""
-    value = int(accum)
-    return value, accum - value
-
-
-def handle_reacquire(state, controller):
-    """Επαναφορά φίλτρου + μηδενισμός prev και accumulators."""
+    If we don't do this the cursor jumps from wherever the hand was
+    to wherever it reappeared. Reset means the first new position
+    becomes the baseline, no jump.
+    """
     controller.reset_filter()
     state.hand_lost = False
     state.prev_x = None
@@ -37,48 +41,39 @@ def handle_reacquire(state, controller):
     state.accum_y = 0.0
 
 
-def compute_movement(state, smooth_cam_x, smooth_cam_y):
-    """Υπολογίζει (dx, dy) σε REL units με sub-pixel accumulation."""
+def compute_movement(state: CursorState, smooth_x: float, smooth_y: float) -> tuple[int, int]:
+    """Turn a smoothed camera position into REL deltas for the mouse.
+
+    Sub-pixel accumulation: fractional pixels get saved and emitted
+    once they cross an integer. Without this, slow hand motion looks
+    like a cursor stuck on a grid.
+
+    Returns:
+        (dx, dy) in REL units. These are integers.
+    """
     dx = dy = 0
     if state.active and state.prev_x is not None:
-        cam_dx = smooth_cam_x - state.prev_x
-        cam_dy = smooth_cam_y - state.prev_y
-        # print(f"Raw delta: ({cam_dx}, {cam_dy})")
+        cam_dx = smooth_x - state.prev_x
+        cam_dy = smooth_y - state.prev_y
+
         state.accum_x += cam_dx * config.DELTA_SCALE
         state.accum_y += cam_dy * config.DELTA_SCALE
-        dx, state.accum_x = _split_int(state.accum_x)
-        dy, state.accum_y = _split_int(state.accum_y) 
-        # Round dx to 8 digits (μαλλον αυτό δεν βοηθάει κ πολύ)
-        #dx = round(dx+state.accum_x, 8)
-        #dy = round(dy+state.accum_y, 8)
-        
+        dx, state.accum_x = split_int(state.accum_x)
+        dy, state.accum_y = split_int(state.accum_y)
 
-        #print(f"With Delta and split_int which does: ({dx}, {dy})")
-
-    state.prev_x = smooth_cam_x
-    state.prev_y = smooth_cam_y
+    state.prev_x = smooth_x
+    state.prev_y = smooth_y
     return dx, dy
 
-def landmark_pos(lm_list, finger_id):
-        """
-        Επιστρέφει τις (x, y) συντεταγμένες ενός landmark από τη λίστα.
 
-        @param lm_list: [[id, x, y], ...]
-        @param finger_id: ID ορόσημου (π.χ. 8 = δείκτης)
-        @returns: (x, y)
-        """
-        return lm_list[finger_id][1], lm_list[finger_id][2]
+def process_landmarks(lm_list: list, state: CursorState, controller: CursorController) -> None:
+    """Run EMA filtering and movement on one frame's landmarks.
 
-def process_landmarks(lm_list, state, controller):
-    """
-    Διαχείριση landmark detection, EMA smoothing, movement, και
-    drawing με οπτική ανατροφοδότηση.
+    Mutates state.dx/dy (for cursor output) and state.filtered_positions
+    (for click detection and the GUI overlay).
 
-    @param img: τρέχον frame
-    @param lm_list: λίστα landmarks
-    @param state: CursorState
-    @param controller: CursorController
-    @returns: (img, dx, dy)
+    When the hand disappears we coast on the last delta for a few frames
+    (velocity hold), then mark hand_lost after HAND_LOST_TIMEOUT.
     """
     state.dx = state.dy = 0
 
@@ -91,22 +86,22 @@ def process_landmarks(lm_list, state, controller):
 
         state.smooth_cam_x, state.smooth_cam_y = controller.update(lm_list)
 
-        # Εύρεση της μεταβολής (dx, dy) σε relative units με sub-pixel accumulation
+        filtered = controller.update_click_points(lm_list)
+        if filtered is not None:
+            if state.smooth_cam_x is not None:
+                # Tuck the cursor finger into the same dict so the GUI draws
+                # one red dot + yellow line for every filtered landmark.
+                filtered[config.CURSOR_FINGER] = (state.smooth_cam_x, state.smooth_cam_y)
+            state.filtered_positions = filtered
+
         if state.smooth_cam_x is not None:
             state.dx, state.dy = compute_movement(state, state.smooth_cam_x, state.smooth_cam_y)
-
-        # print(f"dx: {dx}, dy: {dy}")
 
         state.last_dx = state.dx
         state.last_dy = state.dy
 
         state.raw_x, state.raw_y = landmark_pos(lm_list, config.CURSOR_FINGER)
-        state.display_x, state.display_y = controller.get_display_pos()
-        if state.display_x is not None:
-            state.display_x, state.display_y = int(state.display_x), int(state.display_y)
 
-
-        
     else:
         state.hold_frames += 1
         if state.hold_frames <= config.VELOCITY_HOLD_FRAMES:
@@ -114,11 +109,9 @@ def process_landmarks(lm_list, state, controller):
         if time.time() - state.last_seen > config.HAND_LOST_TIMEOUT and not state.hand_lost:
             state.hand_lost = True
 
-    return state
 
-
-def init_mouse():
-    """Δημιουργία εικονικού ποντικιού + status print."""
+def init_mouse() -> MouseOutput:
+    """Spin up a virtual uinput device. Print status."""
     mouse = MouseOutput()
     if not mouse.ok:
         print("[!] evdev not available")
@@ -129,80 +122,26 @@ def init_mouse():
     return mouse
 
 
-
-def detect_landmarks(detector, img,state):
-    """Ανίχνευση χεριού + εξαγωγή συντεταγμένων."""
-    img,landmarks = detector.find_hands(img)
-    lm_list = detector.find_position(img)
+def detect_landmarks(detector: HandDetector, img, state: CursorState):
+    """Hand detection via MediaPipe. Stores landmarks + annotated image."""
+    img, landmarks = detector.find_hands(img)
     state.landmarks = landmarks
+    
+    lm_list = detector.find_position(img)
     state.lm_list = lm_list
+    
     return img
 
 
-def emit_subframes(mouse, dx, dy):
-    """
-    Σπάσιμο (dx, dy) σε sub-frames με τοπικό accumulator.
-    Στέλνει REL events και ελέγχει πλήκτρα κάθε sub-frame.
-    Επιστρέφει False για έξοδο, True για συνέχεια.
-    """
-    sub = config.MOUSE_SUBDIVISIONS
-    
-    rx = ry = 0.0
-    step_x = dx / sub
-    step_y = dy / sub
-
-    for _ in range(sub):
-        rx += step_x
-        ry += step_y
-        sx, rx = _split_int(rx)
-        sy, ry = _split_int(ry)
-        if sx or sy:
-            mouse.move(sx, sy)
-
-def watch_for_clicks(state: CursorState, lm_list: list, mouse: MouseOutput):
-    """Παρακολουθεί για gestures κλικ (π.χ. pinching) και ενημερώνει το state."""
-    if not lm_list:
-        return
-    
-    # Πρώτα, υπολογίζω την απόσταση μεταξύ του base finger και όλων των click
-
-    base_x, base_y = landmark_pos(lm_list, config.FINGER_BASE_CLICK) 
-    click_distances = {}
-    for click_type, click_id in [(GestureState.LEFT, config.FINGER_LEFT_CLICK),
-                                (GestureState.RIGHT, config.FINGER_RIGHT_CLICK),
-                                (GestureState.MIDDLE, config.FINGER_MIDDLE_CLICK)]:
-        click_x, click_y = landmark_pos(lm_list, click_id)
-
-        # Υπολογίζω την ευκλείδια απόσταση μεταξύ του base finger και του click finger
-        dist = ((click_x - base_x) ** 2 + (click_y - base_y) ** 2) ** 0.5
-        click_distances[click_type] = dist
-    
-    # Παίρνω την ελάχιστη απόσταση και τον αντίστοιχο τύπο κλικ
-    min_click_state = min(click_distances, key=click_distances.get)
-    min_distance = click_distances[min_click_state]
-
-    extrasensitivity=0
-    if state.currently_holding:
-        extrasensitivity= 5
-    if min_distance < config.CLICK_DISTANCE_THRESHOLD + extrasensitivity:
-        #print(f"Detected match with thumb and : {min_click_state.name} (distance: {min_distance:.1f})")
-        state.updateClickState(min_click_state,mouse)
-    else: 
-        #print(f"Detected unmatch with thumb.")
-        state.updateClickState(GestureState.NONE, mouse)
-
-
-def main():
-    # Δημιουργία ουράς που κρατάει μόνο 1 αντικείμενο τη φορά
+def main() -> None:
+    # ---- Initialisation ----
     image_queue = queue.Queue(maxsize=1)
     state_queue = queue.Queue(maxsize=1)
 
     mouse = init_mouse()
 
-    # Αρχικοποίηση και εκκίνηση του Thread της κάμερας
     threaded_cam = ThreadedCamera(config.CAMERA_INDEX).start()
-    
-    time.sleep(0.1) #Αναμονή μέχρι να ανοίξει
+    time.sleep(0.1)
 
     detector = HandDetector()
     controller = CursorController()
@@ -211,64 +150,74 @@ def main():
     state.fps = 0.0
     prev_time = 0.0
 
-    pause_mouse_event = threading.Event()
-    gui_worker = GUIWorker(pause_mouse_event,image_queue,state_queue)
+    pause_event = threading.Event()
+    pause_event.set()   # we start OFF; user hits 'm' to activate
+    quit_event = threading.Event()
+    gui_worker = GUIWorker(pause_event, quit_event, image_queue, state_queue)
 
-    
     TARGET_FPS = config.FRAME_TARGET
     FRAME_DURATION = 1.0 / TARGET_FPS
 
     try:
+        # ---- Main loop ----
         while True:
+            if quit_event.is_set():
+                break
             t0 = time.time()
+
+            # Rolling FPS counter.
             if prev_time > 0:
-                state.fps = 0.9 * state.fps + 0.1 * (1.0 / (t0 - prev_time))
-            
+                instant_fps = 1.0 / (t0 - prev_time)
+                state.fps = (config.FPS_SMOOTHING * state.fps
+                             + (1 - config.FPS_SMOOTHING) * instant_fps)
 
-            # Διαβάζουμε το τελευταίο frame από την κάμερα στο παράλληλο νήμα
-            ret, img = threaded_cam.read()
-            if not ret or img is None:
-                continue # Ή break, αν έκλεισε η κάμερα
+            # (1) Camera. Latest frame from the background thread.
+            flag, img = threaded_cam.read()
+            if not flag or img is None:
+                continue
 
+            # (2) Detection + processing. MediaPipe -> EMA -> movement.
             img = detect_landmarks(detector, img, state)
-            state = process_landmarks(state.lm_list, state, controller)
+            process_landmarks(state.lm_list, state, controller)
 
-            
-            # Άδειασμα παλιάς τιμής εικόνας και state στην ουρά του gui (αν υπάρχει) και τοποθέτηση νέας
+            # (3) GUI. Push new frame and state to the GUI thread.
             if not image_queue.empty():
-                try: image_queue.get_nowait()
-                except queue.Empty: pass
+                try:
+                    image_queue.get_nowait()
+                except queue.Empty:
+                    pass
             image_queue.put(img)
+
             if not state_queue.empty():
-                try: state_queue.get_nowait()
-                except queue.Empty: pass
+                try:
+                    state_queue.get_nowait()
+                except queue.Empty:
+                    pass
             state_queue.put(state)
 
-            #print(f"FPS: {fps:.1f}, dx: {dx}, dy: {dy}, Active: {state.active}, Hand Lost: {state.hand_lost}")
-            
-
-            if not pause_mouse_event.is_set(): # Αν το mouse δεν ειναι paused
+            # (4) Output. Clicks and cursor movement via evdev.
+            if not pause_event.is_set():
                 state.active = True
                 watch_for_clicks(state, state.lm_list, mouse)
-                emit_subframes(mouse, state.dx, state.dy)
+                dx, dy = state.dx, state.dy
+                if dx or dy:
+                    if abs(dx) + abs(dy) >= config.MOVE_DEAD_ZONE:
+                        mouse.move(dx, dy)
             else:
                 state.active = False
-    
+                release_hold(state, mouse)
 
-            # Πόση ώρα πέρασε από την αρχή του loop
-            elapsed_in_loop = time.time() - t0
-            sleep_time = FRAME_DURATION - elapsed_in_loop
-            
+            # Frame pacing. Try to hit TARGET_FPS.
+            elapsed = time.time() - t0
+            sleep_time = FRAME_DURATION - elapsed
             if sleep_time > 0:
-                time.sleep(sleep_time) # Τεχνητή καθυστέρηση για να ματσάρουμε τα fps
-                
-            
-            prev_time = t0  # Αποθήκευση του χρόνου έναρξης του loop  
-                
+                time.sleep(sleep_time)
+
+            prev_time = t0
+
     finally:
         threaded_cam.stop()
         gui_worker.stop()
-        
         detector.close()
         mouse.close()
         if mouse.ok:

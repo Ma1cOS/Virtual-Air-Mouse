@@ -49,7 +49,7 @@ class HandDetector:
                  min_tracking_confidence=config.MIN_TRACKING_CONFIDENCE,
                  preferred_hand=config.PREFERRED_HAND):
         """
-        @param max_num_hands: μέγιστος αριθμός χεριών (2 για handedness)
+        @param max_num_hands: μέγιστος αριθμός χεριών
         @param min_detection_confidence: βεβαιότητα εντοπισμού
         @param min_tracking_confidence: βεβαιότητα παρακολούθησης
         @param preferred_hand: "Right", "Left", "Any"
