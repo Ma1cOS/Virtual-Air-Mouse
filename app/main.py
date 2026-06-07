@@ -199,10 +199,8 @@ def main() -> None:
             if not pause_event.is_set():
                 state.active = True
                 watch_for_clicks(state, state.lm_list, mouse)
-                dx, dy = state.dx, state.dy
-                if dx or dy:
-                    if abs(dx) + abs(dy) >= config.MOVE_DEAD_ZONE:
-                        mouse.move(dx, dy)
+                if state.dx or state.dy:
+                    mouse.move(state.dx, state.dy)
             else:
                 state.active = False
                 release_hold(state, mouse)

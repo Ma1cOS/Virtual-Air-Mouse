@@ -51,7 +51,7 @@ class ThreadedCamera:
                 else:
                     self.ret = False
             
-            time.sleep(config.CAMERA_POLL_SLEEP)
+            time.sleep(1.0 / config.FRAME_TARGET)
 
     def read(self):
         with self.read_lock:
